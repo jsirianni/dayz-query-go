@@ -3,9 +3,11 @@
 package dayz
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 )
 
@@ -48,7 +50,43 @@ type Client struct {
 	conn net.Conn
 }
 
-func (c *Client) ServerInfo() ([]byte, error) {
+// Query sends a query to the DayZ server and returns the
+// response. If there is an error sending the query or reading
+// the response, nil bytes are returned with the error.
+func (c *Client) Query(query []byte) ([]byte, error) {
+	_, err := c.conn.Write(query)
+	if err != nil {
+		return nil, fmt.Errorf("sending query: %v", err)
+	}
+
+	buffer := make([]byte, 2048)
+	n, err := c.conn.Read(buffer)
+	if err != nil {
+		return nil, fmt.Errorf("reading response: %v", err)
+	}
+
+	return buffer[:n], nil
+}
+
+// ServerInfo queries the DayZ server for information and
+// returns the parsed server information. If there is an
+// error querying the server or parsing the response, an
+// empty ServerInfo struct is returned with the error.
+func (c *Client) ServerInfo() (ServerInfo, error) {
+	raw, err := c.serverInfo()
+	if err != nil {
+		return ServerInfo{}, fmt.Errorf("server info: %v", err)
+	}
+
+	info, err := c.parseServerInfo(raw)
+	if err != nil {
+		return ServerInfo{}, fmt.Errorf("parse server info: %v", err)
+	}
+
+	return info, nil
+}
+
+func (c *Client) serverInfo() ([]byte, error) {
 	// Initial query to retrieve the challenge number.
 	query := []byte{
 		0xFF, 0xFF, 0xFF, 0xFF,
@@ -86,6 +124,109 @@ func (c *Client) ServerInfo() ([]byte, error) {
 	return nil, fmt.Errorf("unexpected response")
 }
 
+func (c *Client) parseServerInfo(raw []byte) (ServerInfo, error) {
+	info := ServerInfo{}
+
+	// 0x49 indicates a server info response
+	if len(raw) < 5 || raw[4] != 0x49 {
+		return info, fmt.Errorf("invalid raw server info response with length %d", len(raw))
+	}
+
+	// Skip the header bytes
+	reader := bytes.NewReader(raw[5:])
+
+	protocol, err := reader.ReadByte()
+	if err != nil {
+		return info, fmt.Errorf("reading protocol version: %v", err)
+	}
+	info.ProtocolVersion = fmt.Sprintf("%d", protocol)
+
+	serverName, err := readNullTerminatedString(reader)
+	if err != nil {
+		return info, fmt.Errorf("reading server name: %v", err)
+	}
+	info.ServerName = serverName
+
+	mapName, err := readNullTerminatedString(reader)
+	if err != nil {
+		return info, fmt.Errorf("reading map name: %v", err)
+	}
+	info.MapName = mapName
+
+	gameDirectory, err := readNullTerminatedString(reader)
+	if err != nil {
+		return info, fmt.Errorf("reading game directory: %v", err)
+	}
+	info.GameDirectory = gameDirectory
+
+	// TODO(jsirianni): This value seems to be empty every time,
+	// therefor we are reading it but not using it.
+	_, err = readNullTerminatedString(reader)
+	if err != nil {
+		return info, fmt.Errorf("reading game description: %v", err)
+	}
+
+	var appID uint16
+	if err := binary.Read(reader, binary.LittleEndian, &appID); err != nil {
+		return info, fmt.Errorf("reading app id: %v", err)
+	}
+	info.AppID = fmt.Sprintf("%d", appID)
+
+	players, err := reader.ReadByte()
+	if err != nil {
+		return info, fmt.Errorf("reading player count: %v", err)
+	}
+	info.Players = fmt.Sprintf("%d", players)
+
+	maxPlayers, err := reader.ReadByte()
+	if err != nil {
+		return info, fmt.Errorf("reading max player count: %v", err)
+	}
+	info.MaxPlayers = fmt.Sprintf("%d", maxPlayers)
+
+	bots, err := reader.ReadByte()
+	if err != nil {
+		return info, fmt.Errorf("reading bot count: %v", err)
+	}
+	info.Bots = fmt.Sprintf("%d", bots)
+
+	serverType, err := reader.ReadByte()
+	if err != nil {
+		return info, fmt.Errorf("reading server type: %v", err)
+	}
+	// TODO(jsirianni): Parse server type:
+	// d - dedicated, l - listen, p - proxy
+	// It is probably always 'd' for DayZ servers.
+	info.ServerType = string(serverType)
+
+	// TOOD(jsirianni): Parse OS type: w - Windows, l - Linux
+	osType, err := reader.ReadByte()
+	if err != nil {
+		return info, fmt.Errorf("reading os type: %v", err)
+	}
+	info.OsType = string(osType)
+
+	passwordProtected, err := reader.ReadByte()
+	if err != nil {
+		return info, fmt.Errorf("reading password protected: %v", err)
+	}
+	info.PasswordProtected = strconv.FormatBool(passwordProtected == 1)
+
+	vacSecured, err := reader.ReadByte()
+	if err != nil {
+		return info, fmt.Errorf("reading vac secured: %v", err)
+	}
+	info.VacSecured = strconv.FormatBool(vacSecured == 1)
+
+	serverVersion, err := readNullTerminatedString(reader)
+	if err != nil {
+		return info, fmt.Errorf("reading server version: %v", err)
+	}
+	info.Version = serverVersion
+
+	return info, nil
+}
+
 // TODO(jsirianni): Implement ModList.
 // func (c *Client) ModList() (string, error) {
 // 	query := []byte{0xFF, 0xFF, 0xFF, 0xFF, 'V'}
@@ -117,21 +258,3 @@ func (c *Client) ServerInfo() ([]byte, error) {
 
 // 	return "", fmt.Errorf("unexpected response")
 // }
-
-// Query sends a query to the DayZ server and returns the
-// response. If there is an error sending the query or reading
-// the response, nil bytes are returned with the error.
-func (c *Client) Query(query []byte) ([]byte, error) {
-	_, err := c.conn.Write(query)
-	if err != nil {
-		return nil, fmt.Errorf("sending query: %v", err)
-	}
-
-	buffer := make([]byte, 2048)
-	n, err := c.conn.Read(buffer)
-	if err != nil {
-		return nil, fmt.Errorf("reading response: %v", err)
-	}
-
-	return buffer[:n], nil
-}
