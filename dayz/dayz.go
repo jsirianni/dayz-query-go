@@ -86,6 +86,38 @@ func (c *Client) ServerInfo() ([]byte, error) {
 	return nil, fmt.Errorf("unexpected response")
 }
 
+// TODO(jsirianni): Implement ModList.
+// func (c *Client) ModList() (string, error) {
+// 	query := []byte{0xFF, 0xFF, 0xFF, 0xFF, 'V'}
+
+// 	resp, err := c.Query(query)
+// 	if err != nil {
+// 		return "", fmt.Errorf("initial query: %v", err)
+// 	}
+
+// 	// Check if this is a challenge response
+// 	// 0x41 indicates a challenge response
+// 	if len(resp) >= 5 && resp[4] == 0x41 {
+// 		// Decode the challenge number (last 4 bytes)
+// 		challenge := binary.LittleEndian.Uint32(resp[5:9])
+
+// 		// Append the challenge number to the query
+// 		challengeBytes := make([]byte, 4)
+// 		binary.LittleEndian.PutUint32(challengeBytes, challenge)
+// 		query = append(query, challengeBytes...)
+
+// 		// Resend the query with the challenge number
+// 		resp, err = c.Query(query)
+// 		if err != nil {
+// 			return "", fmt.Errorf("resending query: %v", err)
+// 		}
+
+// 		return string(resp), nil
+// 	}
+
+// 	return "", fmt.Errorf("unexpected response")
+// }
+
 // Query sends a query to the DayZ server and returns the
 // response. If there is an error sending the query or reading
 // the response, nil bytes are returned with the error.

@@ -11,6 +11,7 @@ const (
 	exitNewClientError       = 1
 	exitServerInfoError      = 2
 	exitParseServerInfoError = 3
+	exitModeListError        = 4
 )
 
 func main() {
@@ -19,18 +20,21 @@ func main() {
 
 	dayzClient, err := dayz.NewClient(serverAddr, dayz.WithTimeoutSeconds(10))
 	if err != nil {
+		err := fmt.Errorf("new client: %v", err)
 		fmt.Println(err)
 		os.Exit(exitNewClientError)
 	}
 
 	resp, err := dayzClient.ServerInfo()
 	if err != nil {
+		err := fmt.Errorf("server info: %v", err)
 		fmt.Println(err)
 		os.Exit(exitServerInfoError)
 	}
 
 	info, err := dayz.ParseServerInfo(resp)
 	if err != nil {
+		err := fmt.Errorf("parse server info: %v", err)
 		fmt.Println(err)
 		os.Exit(exitParseServerInfoError)
 	}
@@ -40,9 +44,13 @@ func main() {
 	fmt.Printf("  Server Name: %s\n", info.ServerName)
 	fmt.Printf("  Map Name: %s\n", info.MapName)
 	fmt.Printf("  Game Directory: %s\n", info.GameDirectory)
-	fmt.Printf("  Game Description: %s\n", info.GameDescription)
 	fmt.Printf("  App ID: %s\n", info.AppID)
 	fmt.Printf("  Players: %s\n", info.Players)
 	fmt.Printf("  Max Players: %s\n", info.MaxPlayers)
 	fmt.Printf("  Bots: %s\n", info.Bots)
+	fmt.Printf("  Server Type: %s\n", info.ServerType)
+	fmt.Printf("  OS Type: %s\n", info.OsType)
+	fmt.Printf("  Password Protected: %s\n", info.PasswordProtected)
+	fmt.Printf("  VAC Secured: %s\n", info.VacSecured)
+	fmt.Printf("  Version: %s\n", info.Version)
 }
