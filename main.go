@@ -25,18 +25,11 @@ func main() {
 		os.Exit(exitNewClientError)
 	}
 
-	resp, err := dayzClient.ServerInfo()
+	info, err := dayzClient.ServerInfo()
 	if err != nil {
 		err := fmt.Errorf("server info: %v", err)
 		fmt.Println(err)
 		os.Exit(exitServerInfoError)
-	}
-
-	info, err := dayz.ParseServerInfo(resp)
-	if err != nil {
-		err := fmt.Errorf("parse server info: %v", err)
-		fmt.Println(err)
-		os.Exit(exitParseServerInfoError)
 	}
 
 	fmt.Println("Server Info:")
