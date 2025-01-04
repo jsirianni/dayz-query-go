@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"sync"
+	"syscall"
 
 	"github.com/jsirianni/dayz-query-go/config"
 	"github.com/jsirianni/dayz-query-go/dayz"
@@ -39,7 +43,7 @@ func main() {
 	clients := make([]*dayz.Client, 0, len(config.ServerList))
 
 	for _, server := range config.ServerList {
-		dayzClient, err := dayz.NewClient(server.String(), dayz.WithTimeoutSeconds(10))
+		dayzClient, err := dayz.NewClient(logger, server.String(), dayz.WithTimeoutSeconds(10))
 		if err != nil {
 			logger.Error("new client", zap.Error(err))
 			os.Exit(exitNewClientError)
@@ -47,28 +51,23 @@ func main() {
 		clients = append(clients, dayzClient)
 	}
 
-	for _, dayzClient := range clients {
-		info, err := dayzClient.ServerInfo()
-		if err != nil {
-			logger.Error("server info", zap.Error(err))
-			continue
-		}
+	signalCtx, signalCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer signalCancel()
 
-		logger.Info(
-			"server info",
-			zap.String("protocol_version", info.ProtocolVersion),
-			zap.String("server_name", info.ServerName),
-			zap.String("map_name", info.MapName),
-			zap.String("game_directory", info.GameDirectory),
-			zap.String("app_id", info.AppID),
-			zap.String("players", info.Players),
-			zap.String("max_players", info.MaxPlayers),
-			zap.String("bots", info.Bots),
-			zap.String("server_type", info.ServerType),
-			zap.String("os_type", info.OsType),
-			zap.String("password_protected", info.PasswordProtected),
-			zap.String("vac_secured", info.VacSecured),
-			zap.String("version", info.Version),
-		)
+	wg := sync.WaitGroup{}
+	for _, dayzClient := range clients {
+		wg.Add(1)
+		go func(c *dayz.Client) {
+			if err := dayzClient.Run(signalCtx); err != nil {
+				logger.Error("client run", zap.Error(err))
+			}
+			wg.Done()
+		}(dayzClient)
+		logger.Info("client started")
 	}
+
+	<-signalCtx.Done()
+	logger.Info("signal received, shutting down")
+	wg.Wait()
+	logger.Info("all clients stopped")
 }

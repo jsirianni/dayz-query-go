@@ -4,11 +4,14 @@ package dayz
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"net"
 	"strconv"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // ClientOption represents a DayZ server query client option.
@@ -30,24 +33,65 @@ func WithTimeoutSeconds(timeout int) ClientOption {
 // NewClient creates a new DayZ server query client. If
 // there is an error connecting to the server, a nil client
 // is returned with the error.
-func NewClient(serverAddr string, opts ...ClientOption) (*Client, error) {
+func NewClient(logger *zap.Logger, serverAddr string, opts ...ClientOption) (*Client, error) {
 	conn, err := net.Dial("udp", serverAddr)
 	if err != nil {
 		return nil, err
 	}
 
+	c := &Client{
+		logger: logger,
+		conn:   conn,
+	}
+
 	for _, opt := range opts {
-		if err := opt(&Client{conn}); err != nil {
+		if err := opt(c); err != nil {
 			return nil, fmt.Errorf("configuring option: %v", err)
 		}
 	}
 
-	return &Client{conn}, nil
+	return c, nil
 }
 
 // Client represents a DayZ server query client.
 type Client struct {
-	conn net.Conn
+	logger *zap.Logger
+	conn   net.Conn
+}
+
+// Run runs the service. Blocks until the service is stopped or an error occurs.
+func (c *Client) Run(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			c.logger.Info("client stopped")
+			return nil
+		default:
+			info, err := c.ServerInfo()
+			if err != nil {
+				c.logger.Error("server info", zap.Error(err))
+			}
+
+			c.logger.Info(
+				"server info",
+				zap.String("protocol_version", info.ProtocolVersion),
+				zap.String("server_name", info.ServerName),
+				zap.String("map_name", info.MapName),
+				zap.String("game_directory", info.GameDirectory),
+				zap.String("app_id", info.AppID),
+				zap.String("players", info.Players),
+				zap.String("max_players", info.MaxPlayers),
+				zap.String("bots", info.Bots),
+				zap.String("server_type", info.ServerType),
+				zap.String("os_type", info.OsType),
+				zap.String("password_protected", info.PasswordProtected),
+				zap.String("vac_secured", info.VacSecured),
+				zap.String("version", info.Version),
+			)
+
+			time.Sleep(10 * time.Second)
+		}
+	}
 }
 
 // Query sends a query to the DayZ server and returns the
