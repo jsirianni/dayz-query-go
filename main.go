@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/jsirianni/dayz-query-go/config"
 	"github.com/jsirianni/dayz-query-go/dayz"
@@ -21,6 +22,7 @@ const (
 )
 
 func main() {
+	// TODO(jsirianni): Move to runtime configuration
 	deerIsle := "50.108.116.1:2324"
 	namalsk := "50.108.116.1:2315"
 	s := []string{deerIsle, namalsk}
@@ -51,14 +53,13 @@ func main() {
 		clients = append(clients, dayzClient)
 	}
 
-	signalCtx, signalCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer signalCancel()
-
 	wg := sync.WaitGroup{}
+	clientCtx, clientCancel := context.WithCancel(context.Background())
+	interval := time.Second * 60
 	for _, dayzClient := range clients {
 		wg.Add(1)
 		go func(c *dayz.Client) {
-			if err := dayzClient.Run(signalCtx); err != nil {
+			if err := dayzClient.Run(clientCtx, interval); err != nil {
 				logger.Error("client run", zap.Error(err))
 			}
 			wg.Done()
@@ -66,8 +67,16 @@ func main() {
 		logger.Info("client started")
 	}
 
+	// Block until an OS signal is received
+	signalCtx, signalCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer signalCancel()
 	<-signalCtx.Done()
+
+	// Cancel the client context to stop all clients
+	// before exiting.
 	logger.Info("signal received, shutting down")
+	clientCancel()
 	wg.Wait()
 	logger.Info("all clients stopped")
+	os.Exit(0)
 }

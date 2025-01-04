@@ -60,16 +60,24 @@ type Client struct {
 }
 
 // Run runs the service. Blocks until the service is stopped or an error occurs.
-func (c *Client) Run(ctx context.Context) error {
+func (c *Client) Run(ctx context.Context, interval time.Duration) error {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
 	for {
+		// Ticker will stop if a signal is received
+		// allowing the ctx check to happen without
+		// blocking / delay.
+
 		select {
 		case <-ctx.Done():
 			c.logger.Info("client stopped")
 			return nil
-		default:
+		case <-ticker.C:
 			info, err := c.ServerInfo()
 			if err != nil {
 				c.logger.Error("server info", zap.Error(err))
+				continue
 			}
 
 			c.logger.Info(
@@ -88,8 +96,6 @@ func (c *Client) Run(ctx context.Context) error {
 				zap.String("vac_secured", info.VacSecured),
 				zap.String("version", info.Version),
 			)
-
-			time.Sleep(10 * time.Second)
 		}
 	}
 }
