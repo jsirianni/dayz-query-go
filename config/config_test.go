@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestNew(t *testing.T) {
@@ -46,7 +47,9 @@ func TestNew(t *testing.T) {
 				defer os.Unsetenv(k)
 			}
 
-			c, err := New()
+			logger := zap.NewNop()
+
+			c, err := New(logger)
 			if tc.err != nil {
 				require.Error(t, err, "an error was expected")
 				require.ErrorAs(t, err, &tc.err)
