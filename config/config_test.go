@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestReadEnv(t *testing.T) {
+func TestNew(t *testing.T) {
 	cases := []struct {
 		name     string
 		env      map[string]string
@@ -46,7 +46,7 @@ func TestReadEnv(t *testing.T) {
 				defer os.Unsetenv(k)
 			}
 
-			c, err := ReadEnv()
+			c, err := New()
 			if tc.err != nil {
 				require.Error(t, err, "an error was expected")
 				require.ErrorAs(t, err, &tc.err)

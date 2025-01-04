@@ -23,6 +23,17 @@ type ServerEndpoint struct {
 	port string
 }
 
+// String returns the string representation of the server endpoint
+// in the form of "host:port".
+func (s ServerEndpoint) String() string {
+	return net.JoinHostPort(s.host, s.port)
+}
+
+// New returns a new configuration
+func New() (*Config, error) {
+	return ReadEnv()
+}
+
 // Config is the configuration for the DayZ server monitor.
 type Config struct {
 	// ServerList is the list of DayZ server hostnames or IP
