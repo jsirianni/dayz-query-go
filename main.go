@@ -3,23 +3,33 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/jsirianni/dayz-query-go/config"
 	"github.com/jsirianni/dayz-query-go/dayz"
+	"go.uber.org/zap"
 )
 
 const (
-	exitNewClientError       = 1
-	exitServerInfoError      = 2
-	exitParseServerInfoError = 3
-	exitModeListError        = 4
-	exitNewConfigError       = 5
+	exitNewClientError = 1
+	exitNewConfigError = 5
+	exitNewLoggerError = 6
 )
 
 func main() {
-	os.Setenv("DAYZ_SERVER_LIST", "50.108.116.1:2324,50.108.116.1:2315")
+	deerIsle := "50.108.116.1:2324"
+	namalsk := "50.108.116.1:2315"
+	s := []string{deerIsle, namalsk}
+	os.Setenv("DAYZ_SERVER_LIST", strings.Join(s, ","))
 
-	config, err := config.New()
+	logger, err := zap.NewProduction()
+	if err != nil {
+		err := fmt.Errorf("new logger: %v", err)
+		fmt.Println(err)
+		os.Exit(exitNewLoggerError)
+	}
+
+	config, err := config.New(logger)
 	if err != nil {
 		err := fmt.Errorf("new config: %v", err)
 		fmt.Println(err)
@@ -31,8 +41,7 @@ func main() {
 	for _, server := range config.ServerList {
 		dayzClient, err := dayz.NewClient(server.String(), dayz.WithTimeoutSeconds(10))
 		if err != nil {
-			err := fmt.Errorf("new client: %v", err)
-			fmt.Println(err)
+			logger.Error("new client", zap.Error(err))
 			os.Exit(exitNewClientError)
 		}
 		clients = append(clients, dayzClient)
@@ -41,24 +50,25 @@ func main() {
 	for _, dayzClient := range clients {
 		info, err := dayzClient.ServerInfo()
 		if err != nil {
-			err := fmt.Errorf("server info: %v", err)
-			fmt.Println(err)
-			os.Exit(exitServerInfoError)
+			logger.Error("server info", zap.Error(err))
+			continue
 		}
 
-		fmt.Println("Server Info:")
-		fmt.Printf("  Protocol Version: %s\n", info.ProtocolVersion)
-		fmt.Printf("  Server Name: %s\n", info.ServerName)
-		fmt.Printf("  Map Name: %s\n", info.MapName)
-		fmt.Printf("  Game Directory: %s\n", info.GameDirectory)
-		fmt.Printf("  App ID: %s\n", info.AppID)
-		fmt.Printf("  Players: %s\n", info.Players)
-		fmt.Printf("  Max Players: %s\n", info.MaxPlayers)
-		fmt.Printf("  Bots: %s\n", info.Bots)
-		fmt.Printf("  Server Type: %s\n", info.ServerType)
-		fmt.Printf("  OS Type: %s\n", info.OsType)
-		fmt.Printf("  Password Protected: %s\n", info.PasswordProtected)
-		fmt.Printf("  VAC Secured: %s\n", info.VacSecured)
-		fmt.Printf("  Version: %s\n", info.Version)
+		logger.Info(
+			"server info",
+			zap.String("protocol_version", info.ProtocolVersion),
+			zap.String("server_name", info.ServerName),
+			zap.String("map_name", info.MapName),
+			zap.String("game_directory", info.GameDirectory),
+			zap.String("app_id", info.AppID),
+			zap.String("players", info.Players),
+			zap.String("max_players", info.MaxPlayers),
+			zap.String("bots", info.Bots),
+			zap.String("server_type", info.ServerType),
+			zap.String("os_type", info.OsType),
+			zap.String("password_protected", info.PasswordProtected),
+			zap.String("vac_secured", info.VacSecured),
+			zap.String("version", info.Version),
+		)
 	}
 }

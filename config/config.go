@@ -6,6 +6,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
 const (
@@ -30,12 +32,20 @@ func (s ServerEndpoint) String() string {
 }
 
 // New returns a new configuration
-func New() (*Config, error) {
-	return ReadEnv()
+func New(logger *zap.Logger) (*Config, error) {
+	c, err := ReadEnv()
+	if err != nil {
+		return nil, fmt.Errorf("read env: %w", err)
+	}
+
+	return c, nil
 }
 
 // Config is the configuration for the DayZ server monitor.
 type Config struct {
+	// Logger is a zap logger
+	Logger *zap.Logger
+
 	// ServerList is the list of DayZ server hostnames or IP
 	ServerList []ServerEndpoint
 }
